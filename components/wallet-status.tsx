@@ -7,6 +7,9 @@ export function WalletStatus({
   policy: Policy;
   wallet: WalletRuntime | null;
 }) {
+  const activeHoldings =
+    wallet?.balances?.filter((entry) => Number(entry.amount) > 0) ?? [];
+
   return (
     <section className="dashboard-card space-y-6">
       <div className="space-y-3">
@@ -15,9 +18,9 @@ export function WalletStatus({
           Dedicated MoonPay demo wallet
         </h2>
         <p className="text-sm leading-7 text-[var(--text-dim)]">
-          Open Sentinel is anchored to a local MoonPay wallet in simulated
-          mode. The demo still shows real wallet boundaries, agent planning,
-          and receipt-grade execution review.
+          Open Sentinel is anchored to a local MoonPay wallet and uses MoonPay
+          CLI as the action rail for payments, bridges, and swaps. The wallet
+          only proceeds after policy review and execution preparation clear.
         </p>
       </div>
 
@@ -31,6 +34,7 @@ export function WalletStatus({
           <div className="mt-3 flex flex-wrap gap-2">
             <span className="policy-pill">{wallet?.executionMode ?? "simulated"}</span>
             <span className="policy-pill">local wallet</span>
+            <span className="policy-pill">{wallet?.authStatus ?? "unknown auth"}</span>
           </div>
         </div>
         <div className="insight-card">
@@ -63,10 +67,42 @@ export function WalletStatus({
       <div className="insight-card">
         <p className="label">MoonPay account status</p>
         <p className="mt-3 text-sm leading-7 text-[var(--text-dim)]">
-          Local wallet creation and retrieval work without account login.
-          Account-backed user endpoints are still gated, so the demo is framed
-          honestly around the local wallet runtime.
+          {wallet?.readiness === "ready"
+            ? "Authenticated wallet checks are live and the wallet is funded enough to proceed with real CLI actions."
+            : wallet?.readiness === "needs-funding"
+              ? "Authentication is working. The remaining live-execution gate is funding this wallet with the assets needed for the demo path."
+              : wallet?.readiness === "auth-required"
+                ? "The wallet exists locally, but authenticated MoonPay execution still requires a valid session."
+                : "The wallet is available locally. Execution is still being prepared before any live money movement."}
         </p>
+      </div>
+
+      <div className="insight-card">
+        <p className="label">Wallet readiness</p>
+        <p className="value">{wallet?.readiness ?? "loading"}</p>
+        <p className="mt-3 text-sm leading-7 text-[var(--text-dim)]">
+          Last checked {wallet?.lastCheckedAt ? new Date(wallet.lastCheckedAt).toLocaleTimeString() : "just now"}.
+        </p>
+      </div>
+
+      <div className="insight-card">
+        <p className="label">Visible balances</p>
+        {activeHoldings.length > 0 ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {activeHoldings.map((entry) => (
+              <span
+                key={`${entry.chain}-${entry.tokenAddress}`}
+                className="policy-pill"
+              >
+                {entry.chain} {entry.tokenSymbol} {entry.amount}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm leading-7 text-[var(--text-dim)]">
+            No funded balances detected yet across Base, Ethereum, or Arbitrum.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -82,7 +118,8 @@ export function WalletStatus({
           <p className="label">Judge takeaway</p>
           <p className="mt-3 text-sm leading-7 text-[var(--text-dim)]">
             The agent can pay, bridge, swap, and stage DCA plans, but only
-            after the wallet perimeter and dry-run both clear.
+            after the wallet perimeter, dry-run, and MoonPay execution path all
+            clear.
           </p>
         </div>
       </div>

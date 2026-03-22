@@ -57,6 +57,38 @@ export type CounterpartyResolution = {
   reason: string;
 };
 
+export type WalletHolding = {
+  chain: SupportedChain;
+  tokenSymbol: string;
+  tokenAddress: string;
+  amount: string;
+  amountUsd?: number | null;
+};
+
+export type PolicyArtifact = {
+  standard: string;
+  exportedAt: string;
+  walletLayer: string;
+  walletName: string;
+  policyTypes: Array<{
+    name: string;
+    description: string;
+    value: string | number | boolean | string[];
+  }>;
+};
+
+export type ExecutionStepResult = {
+  stepId: string;
+  type: CommandIntent;
+  status: "prepared" | "executed" | "failed" | "blocked";
+  detail: string;
+  command: string;
+  txHashes: string[];
+  beforeBalances?: WalletHolding[];
+  afterBalances?: WalletHolding[];
+  rawResult?: string;
+};
+
 export type Receipt = {
   id: string;
   createdAt: string;
@@ -67,6 +99,8 @@ export type Receipt = {
   walletName?: string;
   walletAddress?: string;
   counterpartyDisplay?: string;
+  policyArtifact?: PolicyArtifact;
+  executionSteps?: ExecutionStepResult[];
 };
 
 export type WalletRuntime = {
@@ -75,4 +109,8 @@ export type WalletRuntime = {
   executionMode: "live" | "simulated";
   localWalletsAvailable: boolean;
   accountLoginRequired: boolean;
+  authStatus?: "authenticated" | "unauthenticated" | "unknown";
+  readiness?: "ready" | "needs-funding" | "auth-required" | "simulated";
+  balances?: WalletHolding[];
+  lastCheckedAt?: string;
 };

@@ -8,11 +8,13 @@ export function ReviewPanel({
   policyResult,
   counterparty,
   onExecute,
+  executionMode,
 }: {
   plan: CommandPlan;
   policyResult: PolicyEvaluation;
   counterparty: CounterpartyResolution | null;
   onExecute: () => void;
+  executionMode?: "live" | "simulated";
 }) {
   return (
     <section className="dashboard-card space-y-6">
@@ -108,7 +110,9 @@ export function ReviewPanel({
         type="button"
         onClick={onExecute}
       >
-        Generate receipt + simulate route
+        {executionMode === "live"
+          ? "Generate receipt + execute MoonPay route"
+          : "Generate receipt + prepare MoonPay route"}
       </button>
     </section>
   );

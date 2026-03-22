@@ -109,7 +109,7 @@ export function AppShell() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ plan, policyResult, counterparty }),
+      body: JSON.stringify({ plan, policyResult, counterparty, policy }),
     });
     const data = (await response.json()) as { receipt: Receipt };
     setReceipts((current) => [data.receipt, ...current]);
@@ -158,7 +158,11 @@ export function AppShell() {
               <span className="policy-pill">OpenWallet Standard</span>
               <span className="policy-pill">MoonPay CLI Agents</span>
               <span className="policy-pill">Synthesis Open Track</span>
-              <span className="policy-pill">simulated MoonPay wallet runtime</span>
+              <span className="policy-pill">
+                {wallet?.executionMode === "live"
+                  ? "live MoonPay wallet runtime"
+                  : "MoonPay wallet runtime"}
+              </span>
             </div>
 
             <div className="hero-summary">
@@ -174,8 +178,16 @@ export function AppShell() {
               </article>
               <article className="summary-card">
                 <span>Execution path</span>
-                <strong>{wallet?.executionMode ?? "simulated"}</strong>
-                <p className="mt-2 muted-copy">Local wallet path stays usable even while account login remains gated.</p>
+                <strong>{wallet?.readiness ?? wallet?.executionMode ?? "simulated"}</strong>
+                <p className="mt-2 muted-copy">
+                  {wallet?.readiness === "ready"
+                    ? "Wallet is authenticated and funded enough for live MoonPay execution."
+                    : wallet?.readiness === "needs-funding"
+                      ? "Auth is in place. Funding the wallet is the remaining gate for live execution."
+                      : wallet?.readiness === "auth-required"
+                        ? "Wallet exists, but authenticated MoonPay execution still needs a valid session."
+                        : "Local wallet path stays usable while live execution is being prepared."}
+                </p>
               </article>
             </div>
           </div>

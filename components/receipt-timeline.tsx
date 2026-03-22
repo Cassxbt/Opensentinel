@@ -37,9 +37,7 @@ export function ReceiptTimeline({ receipts }: { receipts: Receipt[] }) {
 
             {receipt.walletName || receipt.walletAddress ? (
               <div className="mt-4 rounded-[18px] border border-[var(--line)] bg-[rgba(255,255,255,0.022)] px-4 py-4">
-                <p className="receipt-label">
-                  Wallet context
-                </p>
+                <p className="receipt-label">Wallet context</p>
                 <p className="mt-2 text-sm text-[var(--text-primary)]">
                   {receipt.walletName ?? "MoonPay local wallet"}
                 </p>
@@ -54,6 +52,72 @@ export function ReceiptTimeline({ receipts }: { receipts: Receipt[] }) {
               </div>
             ) : null}
 
+            {receipt.policyArtifact ? (
+              <div className="mt-4 rounded-[18px] border border-[var(--line)] bg-[rgba(255,255,255,0.022)] px-4 py-4">
+                <p className="receipt-label">OWS-aligned policy export</p>
+                <p className="mt-2 text-sm leading-7 text-[var(--text-dim)]">
+                  {receipt.policyArtifact.standard} for {receipt.policyArtifact.walletName}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {receipt.policyArtifact.policyTypes.map((item) => (
+                    <span key={item.name} className="policy-pill">
+                      {item.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {receipt.executionSteps && receipt.executionSteps.length > 0 ? (
+              <div className="mt-4 space-y-3">
+                {receipt.executionSteps.map((step) => (
+                  <div
+                    key={step.stepId}
+                    className="rounded-[18px] border border-[var(--line)] bg-[rgba(255,255,255,0.022)] px-4 py-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="receipt-label">
+                          {step.type} / {step.stepId}
+                        </p>
+                        <p className="mt-2 text-sm leading-7 text-[var(--text-dim)]">
+                          {step.detail}
+                        </p>
+                      </div>
+                      <span
+                        className={
+                          step.status === "executed"
+                            ? "badge-ok"
+                            : step.status === "failed" || step.status === "blocked"
+                              ? "badge-blocked"
+                              : "badge-live"
+                        }
+                      >
+                        {step.status}
+                      </span>
+                    </div>
+                    <code className="hash-chip mt-4 block break-all text-left">
+                      {step.command}
+                    </code>
+                    {step.txHashes.length > 0 ? (
+                      <div className="receipt-hashes mt-4">
+                        {step.txHashes.map((hash) => (
+                          <code key={hash} className="hash-chip">
+                            {hash}
+                          </code>
+                        ))}
+                      </div>
+                    ) : null}
+                    {step.rawResult ? (
+                      <p className="mt-4 text-xs leading-6 text-[var(--text-muted)]">
+                        {step.rawResult}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             {receipt.txHashes.length > 0 ? (
               <div className="receipt-hashes mt-4">
                 {receipt.txHashes.map((hash) => (
@@ -61,6 +125,14 @@ export function ReceiptTimeline({ receipts }: { receipts: Receipt[] }) {
                     {hash}
                   </code>
                 ))}
+              </div>
+            ) : receipt.mode === "simulated" ? (
+              <div className="mt-4 rounded-[18px] border border-[var(--line)] bg-[rgba(255,255,255,0.022)] px-4 py-4">
+                <p className="receipt-label">Execution evidence</p>
+                <p className="mt-2 text-sm leading-7 text-[var(--text-dim)]">
+                  This receipt records policy, wallet context, and prepared
+                  MoonPay commands without claiming an onchain transaction hash.
+                </p>
               </div>
             ) : null}
           </article>
