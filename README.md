@@ -2,6 +2,14 @@
 
 Open Sentinel is a policy-first wallet control plane for AI agents.
 
+## Build Stack
+
+- Next.js 15 + React 19
+- TypeScript policy engine
+- OpenAI Responses API for command planning
+- viem for ENS and identity resolution
+- MoonPay local wallet runtime in simulated mode
+
 ## Core Idea
 
 An agent can execute wallet actions, but only inside visible user-defined rules:
@@ -45,6 +53,12 @@ counterparty identity, and execution trail visible before funds move.
 Open Sentinel is currently built around the verified local MoonPay wallet path.
 Local wallet creation and retrieval work in simulated mode even while
 account-backed user endpoints remain login-gated.
+
+## Current Status
+
+The current repo demonstrates the bounded-wallet control plane, judge-facing
+review UX, and receipt-ledger flow. The execution model is intentionally honest
+about simulated mode while MoonPay account-backed actions remain gated.
 
 ## Local Development
 
