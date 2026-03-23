@@ -10,13 +10,13 @@ export function PolicyForm({
   onChange,
 }: {
   policy: Policy;
-  onChange: (policy: Policy) => void;
+  onChange: (p: Policy) => void;
 }) {
   function toggleChain(chain: SupportedChain) {
     onChange({
       ...policy,
       allowedChains: policy.allowedChains.includes(chain)
-        ? policy.allowedChains.filter((entry) => entry !== chain)
+        ? policy.allowedChains.filter((c) => c !== chain)
         : [...policy.allowedChains, chain],
     });
   }
@@ -25,89 +25,70 @@ export function PolicyForm({
     onChange({
       ...policy,
       allowedTokens: policy.allowedTokens.includes(token)
-        ? policy.allowedTokens.filter((entry) => entry !== token)
+        ? policy.allowedTokens.filter((t) => t !== token)
         : [...policy.allowedTokens, token],
     });
   }
 
   return (
-    <section className="dashboard-card space-y-6">
-      <div className="space-y-3">
-        <p className="eyebrow">Policy Setup</p>
-        <h2 className="mt-2 text-2xl font-semibold uppercase tracking-[-0.04em]">
-          Wallet boundary
-        </h2>
-        <p className="text-sm leading-7 text-[var(--text-dim)]">
-          The agent is only useful if the limits are legible. These settings
-          define what the wallet may do before the dry-run can clear.
-        </p>
+    <>
+      <div className="sidebar-section">
+        <span className="sidebar-label">policy</span>
+        <div className="sidebar-row">
+          <div className="sidebar-field">
+            <span className="sidebar-dim">daily $</span>
+            <input
+              className="term-number-input"
+              type="number"
+              value={policy.dailySpendUsd}
+              onChange={(e) => onChange({ ...policy, dailySpendUsd: Number(e.target.value) })}
+            />
+          </div>
+          <div className="sidebar-field">
+            <span className="sidebar-dim">approval $</span>
+            <input
+              className="term-number-input"
+              type="number"
+              value={policy.manualApprovalThresholdUsd}
+              onChange={(e) =>
+                onChange({ ...policy, manualApprovalThresholdUsd: Number(e.target.value) })
+              }
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="grid gap-2 text-sm text-[var(--text-dim)]">
-          Daily spend limit (USD)
-          <input
-            className="input-shell"
-            type="number"
-            value={policy.dailySpendUsd}
-            onChange={(event) =>
-              onChange({ ...policy, dailySpendUsd: Number(event.target.value) })
-            }
-          />
-        </label>
-        <label className="grid gap-2 text-sm text-[var(--text-dim)]">
-          Manual approval threshold (USD)
-          <input
-            className="input-shell"
-            type="number"
-            value={policy.manualApprovalThresholdUsd}
-            onChange={(event) =>
-              onChange({
-                ...policy,
-                manualApprovalThresholdUsd: Number(event.target.value),
-              })
-            }
-          />
-        </label>
-      </div>
-
-      <div className="space-y-3">
-        <p className="eyebrow">
-          Allowed chains
-        </p>
-        <div className="flex flex-wrap gap-2">
+      <div className="sidebar-section">
+        <span className="sidebar-label">allowed chains</span>
+        <div className="term-toggle-row">
           {availableChains.map((chain) => (
             <button
               key={chain}
-              className="policy-pill"
+              className={`term-toggle ${policy.allowedChains.includes(chain) ? "active" : ""}`}
               type="button"
               onClick={() => toggleChain(chain)}
             >
-              <span>{policy.allowedChains.includes(chain) ? "•" : "○"}</span>
-              {chain}
+              {policy.allowedChains.includes(chain) ? "[●]" : "[○]"} {chain}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="space-y-3">
-        <p className="eyebrow">
-          Allowed tokens
-        </p>
-        <div className="flex flex-wrap gap-2">
+      <div className="sidebar-section">
+        <span className="sidebar-label">allowed tokens</span>
+        <div className="term-toggle-row">
           {availableTokens.map((token) => (
             <button
               key={token}
-              className="policy-pill"
+              className={`term-toggle ${policy.allowedTokens.includes(token) ? "active" : ""}`}
               type="button"
               onClick={() => toggleToken(token)}
             >
-              <span>{policy.allowedTokens.includes(token) ? "•" : "○"}</span>
-              {token}
+              {policy.allowedTokens.includes(token) ? "[●]" : "[○]"} {token}
             </button>
           ))}
         </div>
       </div>
-    </section>
+    </>
   );
 }

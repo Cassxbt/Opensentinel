@@ -34,6 +34,8 @@ export type CommandPlan = {
   intent: CommandIntent;
   confidence: "high" | "medium";
   steps: CommandStep[];
+  thinking?: string;
+  agentResponse?: string;
 };
 
 export type PolicyCheck = {

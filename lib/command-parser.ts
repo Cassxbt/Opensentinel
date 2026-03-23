@@ -119,7 +119,10 @@ function buildSteps(intent: CommandIntent, prompt: string): CommandStep[] {
 }
 
 export function createCommandPlan(rawPrompt: string): CommandPlan {
-  const normalizedPrompt = rawPrompt.trim().toLowerCase() || "swap 50 usdc into eth on base";
+  const normalizedPrompt = rawPrompt.trim().toLowerCase();
+  if (!normalizedPrompt) {
+    return { rawPrompt: "", normalizedPrompt: "", intent: "swap", confidence: "medium", steps: [] };
+  }
   const intent = inferIntent(normalizedPrompt);
 
   return {

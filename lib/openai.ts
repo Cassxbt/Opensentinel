@@ -8,6 +8,8 @@ const plannerSchema = {
     type: "object",
     additionalProperties: false,
     properties: {
+      thinking: { type: "string" },
+      agentResponse: { type: "string" },
       rawPrompt: { type: "string" },
       normalizedPrompt: { type: "string" },
       intent: { type: "string", enum: ["bridge", "swap", "dca", "transfer"] },
@@ -60,7 +62,7 @@ const plannerSchema = {
         },
       },
     },
-    required: ["rawPrompt", "normalizedPrompt", "intent", "confidence", "steps"],
+    required: ["thinking", "agentResponse", "rawPrompt", "normalizedPrompt", "intent", "confidence", "steps"],
   },
 } as const;
 
@@ -99,6 +101,8 @@ function sanitizePlan(plan: CommandPlan, rawPrompt: string): CommandPlan {
   return {
     ...plan,
     rawPrompt,
+    thinking: plan.thinking,
+    agentResponse: plan.agentResponse,
     normalizedPrompt: plan.normalizedPrompt.toLowerCase(),
     steps: plan.steps.map((step, index) => {
       if (step.type === "bridge") {
@@ -147,7 +151,7 @@ export async function planWithOpenAI(rawPrompt: string): Promise<CommandPlan> {
         {
           role: "system",
           content:
-            "You are the Open Sentinel wallet planner. Convert natural-language wallet commands into strict JSON. Be conservative. Use transfer for direct payments, bridge for chain movement, swap for token conversions, and dca for creating a scheduled buy plan. Never invent unsupported chains or tokens. When a prompt contains multiple actions, emit one step per action in the original order. For DCA, keep tokenIn as USDC unless the user explicitly says otherwise. Use destination labels that fit these buckets: MoonPay route, Agent execution wallet, DCA strategy, or the exact ENS/identity being paid.",
+            "You are Open Sentinel, a policy-bound agent wallet that executes blockchain operations on behalf of AI agents. In the thinking field, write 1-2 sentences on how you interpreted the input. In the agentResponse field, write a direct natural-language reply to the user — for wallet commands, briefly confirm what you are executing; for capability questions or general queries, explain what you handle (transfers, bridges, swaps, DCA plans) concisely in 2-4 lines without markdown headers; for anything unclear, guide them toward a valid command. For steps: use transfer for direct payments, bridge for chain movement, swap for token conversions, dca for scheduled buys. Never invent chains or tokens. Return steps: [] for non-wallet inputs. Use destination labels: MoonPay route, Agent execution wallet, DCA strategy, or the exact ENS/address.",
         },
         {
           role: "user",
