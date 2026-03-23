@@ -1,6 +1,8 @@
 import type { CommandIntent, CommandPlan, CommandStep, SupportedChain, SupportedToken } from "@/lib/types";
+import { looksLikeResearchPrompt } from "@/lib/market-data";
 
 function inferIntent(prompt: string): CommandIntent {
+  if (looksLikeResearchPrompt(prompt)) return "research";
   if (prompt.includes("dca")) return "dca";
   if (prompt.includes("send") || prompt.includes("pay") || prompt.includes("transfer")) {
     return "transfer";
@@ -30,6 +32,10 @@ function inferAmount(prompt: string): number {
 }
 
 function buildSteps(intent: CommandIntent, prompt: string): CommandStep[] {
+  if (intent === "research") {
+    return [];
+  }
+
   const amount = inferAmount(prompt);
   const sourceChain = inferChain(prompt, "ethereum");
   const destinationChain = prompt.includes("to base")

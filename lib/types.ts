@@ -2,6 +2,8 @@ export type SupportedChain = "base" | "ethereum" | "arbitrum";
 
 export type SupportedToken = "USDC" | "ETH" | "WETH";
 
+export type CommandIntent = "bridge" | "swap" | "dca" | "transfer" | "research";
+
 export type Policy = {
   name: string;
   dailySpendUsd: number;
@@ -11,8 +13,6 @@ export type Policy = {
   requireDryRun: boolean;
   manualApprovalThresholdUsd: number;
 };
-
-export type CommandIntent = "bridge" | "swap" | "dca" | "transfer";
 
 export type CommandStep = {
   id: string;

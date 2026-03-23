@@ -1,4 +1,5 @@
 import { createCommandPlan } from "@/lib/command-parser";
+import { looksLikeResearchPrompt, resolveResearchPlan } from "@/lib/market-data";
 import type { CommandPlan, CommandStep } from "@/lib/types";
 
 const plannerSchema = {
@@ -12,7 +13,7 @@ const plannerSchema = {
       agentResponse: { type: "string" },
       rawPrompt: { type: "string" },
       normalizedPrompt: { type: "string" },
-      intent: { type: "string", enum: ["bridge", "swap", "dca", "transfer"] },
+      intent: { type: "string", enum: ["bridge", "swap", "dca", "transfer", "research"] },
       confidence: { type: "string", enum: ["high", "medium"] },
       steps: {
         type: "array",
@@ -134,6 +135,10 @@ function sanitizePlan(plan: CommandPlan, rawPrompt: string): CommandPlan {
 }
 
 export async function planWithOpenAI(rawPrompt: string): Promise<CommandPlan> {
+  if (looksLikeResearchPrompt(rawPrompt)) {
+    return resolveResearchPlan(rawPrompt);
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return createCommandPlan(rawPrompt);
@@ -151,7 +156,7 @@ export async function planWithOpenAI(rawPrompt: string): Promise<CommandPlan> {
         {
           role: "system",
           content:
-            "You are Open Sentinel, a policy-bound agent wallet that executes blockchain operations on behalf of AI agents. In the thinking field, write 1-2 sentences on how you interpreted the input. In the agentResponse field, write a direct natural-language reply to the user — for wallet commands, briefly confirm what you are executing; for capability questions or general queries, explain what you handle (transfers, bridges, swaps, DCA plans) concisely in 2-4 lines without markdown headers; for anything unclear, guide them toward a valid command. For steps: use transfer for direct payments, bridge for chain movement, swap for token conversions, dca for scheduled buys. Never invent chains or tokens. Return steps: [] for non-wallet inputs. Use destination labels: MoonPay route, Agent execution wallet, DCA strategy, or the exact ENS/address.",
+            "You are Open Sentinel, a policy-bound agent wallet that executes blockchain operations on behalf of AI agents. In the thinking field, write 1-2 sentences on how you interpreted the input. In the agentResponse field, write a direct natural-language reply to the user — for wallet commands, briefly confirm what you are executing; for capability questions or general queries, explain what you handle (transfers, bridges, swaps, DCA plans, live token prices) concisely in 2-4 lines without markdown headers; for anything unclear, guide them toward a valid command. For steps: use transfer for direct payments, bridge for chain movement, swap for token conversions, dca for scheduled buys. Use intent=research with steps: [] for market-data or read-only questions. Never invent chains or tokens. Use destination labels: MoonPay route, Agent execution wallet, DCA strategy, or the exact ENS/address.",
         },
         {
           role: "user",
@@ -179,6 +184,9 @@ export async function planWithOpenAI(rawPrompt: string): Promise<CommandPlan> {
 
   try {
     const parsed = JSON.parse(text) as CommandPlan;
+    if (parsed.intent === "research" || (parsed.steps.length === 0 && looksLikeResearchPrompt(rawPrompt))) {
+      return resolveResearchPlan(rawPrompt);
+    }
     return sanitizePlan(parsed, rawPrompt);
   } catch {
     return createCommandPlan(rawPrompt);

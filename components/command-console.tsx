@@ -4,6 +4,7 @@ const examples = [
   "Send 45 USDC to research-agent.eth for research ops.",
   "Bridge 80 USDC to Base, then create a 5 day DCA plan into ETH.",
   "Swap 30 USDC into ETH on Base if policy allows.",
+  "What is current ETH price and SOL price?",
 ];
 
 export function CommandConsole({
@@ -47,7 +48,7 @@ export function CommandConsole({
             className="term-textarea"
             value={prompt}
             rows={2}
-            placeholder="describe the wallet action… (⌘Enter to execute)"
+            placeholder="describe the wallet action or ask for live token prices… (⌘Enter to execute)"
             onChange={(e) => onPromptChange(e.target.value)}
             onKeyDown={handleKeyDown}
           />
