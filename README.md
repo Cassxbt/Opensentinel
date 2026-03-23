@@ -2,13 +2,16 @@
 
 Open Sentinel is a policy-first wallet control plane for AI agents.
 
+Built for **Synthesis 2026**. The event is now in **judging in progress**, with winners announced **March 25, 2026**.
+
 ## Build Stack
 
 - Next.js 15 + React 19
 - TypeScript policy engine
 - OpenAI Responses API for command planning
-- viem for ENS and identity resolution
-- MoonPay local wallet runtime in simulated mode
+- viem for allowlist-first ENS and identity resolution
+- MoonPay CLI for wallet runtime and live execution
+- Narrow live market-data fallback chain for read-only token prices
 
 ## Core Idea
 
@@ -27,6 +30,7 @@ An agent can execute wallet actions, but only inside visible user-defined rules:
 - bridge across chains
 - swap into another asset
 - create a DCA plan
+- answer live token-price questions
 
 ## Why It Matters
 
@@ -38,27 +42,48 @@ counterparty identity, and execution trail visible before funds move.
 
 1. The user gives one natural-language wallet instruction.
 2. The planner converts it into a structured sequence.
-3. The policy engine checks whether the wallet is allowed to do it.
-4. The wallet only proceeds if the route clears the perimeter.
-5. The system produces a receipt-grade execution trail judges can inspect.
+3. ENS / counterparty resolution binds human-readable identities to addresses.
+4. The policy engine checks whether the wallet is allowed to do it.
+5. The wallet only proceeds if the route clears the perimeter.
+6. The system produces a receipt-grade execution trail judges can inspect.
 
-## Target Tracks
+## Primary Target Tracks
 
 - OpenWallet Standard
 - MoonPay CLI Agents
 - Synthesis Open Track
 
-## Current MoonPay State
+## What Works Today
 
-Open Sentinel is currently built around the verified local MoonPay wallet path.
-Local wallet creation and retrieval work in simulated mode even while
-account-backed user endpoints remain login-gated.
+- natural-language parsing for send / swap / bridge / DCA plan requests
+- deterministic policy evaluation before execution
+- allowlist-first ENS-aware destination handling
+- live wallet readiness checks against the local MoonPay CLI session
+- live token-price lookups for a fixed set of tracked tokens with fallback read-only sources
+- receipt / ledger output for policy and execution evidence
 
 ## Current Status
 
 The current repo demonstrates the bounded-wallet control plane, judge-facing
-review UX, and receipt-ledger flow. The execution model is intentionally honest
-about simulated mode while MoonPay account-backed actions remain gated.
+review UX, live-mode readiness checks, and receipt-ledger flow. Open Sentinel
+can be run in `live` mode for local MoonPay-backed testing, but that path is
+still tightly coupled to the local CLI session and can fall back to blocked
+preflight states if auth expires, balances are missing, the wrong chain is
+funded, or native gas is unavailable.
+
+## Current MoonPay State
+
+Open Sentinel is built around the local MoonPay wallet `open-sentinel-demo`.
+The live execution path is driven by the local MoonPay CLI session, so wallet
+reads and execution readiness depend on:
+
+- a valid local MoonPay auth session
+- the correct token on the correct chain
+- native gas on that chain for execution
+- the planner selecting or being told the right execution chain
+
+When those conditions are not met, Sentinel keeps the request at the preflight
+or blocked stage and records the reason in the execution ledger.
 
 ## Local Development
 
@@ -77,17 +102,20 @@ OPENAI_MODEL=gpt-4o-mini
 MOONPAY_WALLET_NAME=open-sentinel-demo
 DEMO_WALLET_ADDRESS=0x1A28C3C6263f6f7B65458457081Eb57d20Cd3856
 ENS_RPC_URL=https://ethereum-rpc.publicnode.com
+MOONPAY_EXECUTION_MODE=live
+```
+
+For dry-run testing without live wallet actions:
+
+```bash
 MOONPAY_EXECUTION_MODE=simulated
 ```
 
 ## Confirmed local MoonPay wallet
 
-The current local simulated wallet confirmed through `mp wallet list` is:
+The current local wallet confirmed through `mp wallet list` is:
 
 - wallet name: `open-sentinel-demo`
 - Base address: `0x1A28C3C6263f6f7B65458457081Eb57d20Cd3856`
 
-Local wallet creation and retrieval work in simulated mode even if authenticated
-account commands return `403 Forbidden`.
-
-Keep `MOONPAY_EXECUTION_MODE=simulated` until the MoonPay action path is stable.
+This wallet is used for local MoonPay-backed testing and demo recording.

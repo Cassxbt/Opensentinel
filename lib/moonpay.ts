@@ -269,6 +269,23 @@ function getBalancesSnapshot(wallet: WalletRuntime, chain: SupportedChain) {
   return (wallet.balances ?? []).filter((entry) => entry.chain === chain);
 }
 
+function findFundedHolding({
+  wallet,
+  chain,
+  token,
+}: {
+  wallet: WalletRuntime;
+  chain: SupportedChain;
+  token: SupportedToken;
+}) {
+  return (wallet.balances ?? []).find(
+    (entry) =>
+      entry.chain === chain &&
+      entry.tokenSymbol.toUpperCase() === token &&
+      Number(entry.amount) > 0,
+  );
+}
+
 function getLiveBlockDetail(wallet: WalletRuntime) {
   if (wallet.readiness === "auth-required") {
     return "Live execution is blocked until MoonPay authentication is restored.";
@@ -279,6 +296,46 @@ function getLiveBlockDetail(wallet: WalletRuntime) {
   }
 
   return "Live execution is not ready yet.";
+}
+
+function getGasTokenForChain(chain: SupportedChain) {
+  if (chain === "base" || chain === "ethereum" || chain === "arbitrum") {
+    return "ETH" as const;
+  }
+
+  return null;
+}
+
+function getInsufficientBalanceDetail({
+  wallet,
+  step,
+}: {
+  wallet: WalletRuntime;
+  step: CommandStep;
+}) {
+  const requiredChain = step.type === "bridge" ? step.sourceChain : step.destinationChain;
+  const fundedOnOtherChains = (wallet.balances ?? []).filter(
+    (entry) =>
+      entry.tokenSymbol.toUpperCase() === step.tokenIn &&
+      Number(entry.amount) > 0 &&
+      entry.chain !== requiredChain,
+  );
+
+  if (fundedOnOtherChains.length > 0) {
+    const alternative = fundedOnOtherChains[0];
+    return `Live execution blocked: ${step.tokenIn} is funded on ${alternative.chain}, but this action is trying to execute on ${requiredChain}. Specify the funded chain in the prompt or move funds first.`;
+  }
+
+  return `Live execution blocked: no funded ${step.tokenIn} balance was found on ${requiredChain}.`;
+}
+
+function getMissingGasDetail(chain: SupportedChain) {
+  const gasToken = getGasTokenForChain(chain);
+  if (!gasToken) {
+    return `Live execution blocked: no funded gas token was found on ${chain}.`;
+  }
+
+  return `Live execution blocked: no funded ${gasToken} balance was found on ${chain} for gas. Add a small amount of ${gasToken} on ${chain}, then retry.`;
 }
 
 function getRecipient({
@@ -432,6 +489,50 @@ export async function executePlanWithMoonPay({
         detail:
           "Execution could not be prepared because the destination did not resolve to a concrete recipient address.",
         command: "unresolved recipient",
+        txHashes: [],
+        beforeBalances,
+        afterBalances: beforeBalances,
+      });
+      continue;
+    }
+
+    const fundedHolding = findFundedHolding({
+      wallet,
+      chain: activeChain,
+      token: step.tokenIn,
+    });
+
+    if (wallet.executionMode === "live" && !fundedHolding) {
+      executionSteps.push({
+        stepId: step.id,
+        type: step.type,
+        status: "blocked",
+        detail: getInsufficientBalanceDetail({ wallet, step }),
+        command: "insufficient funded balance",
+        txHashes: [],
+        beforeBalances,
+        afterBalances: beforeBalances,
+      });
+      continue;
+    }
+
+    const gasToken = getGasTokenForChain(activeChain);
+    const gasHolding =
+      gasToken
+        ? findFundedHolding({
+            wallet,
+            chain: activeChain,
+            token: gasToken,
+          })
+        : null;
+
+    if (wallet.executionMode === "live" && !gasHolding) {
+      executionSteps.push({
+        stepId: step.id,
+        type: step.type,
+        status: "blocked",
+        detail: getMissingGasDetail(activeChain),
+        command: "missing gas balance",
         txHashes: [],
         beforeBalances,
         afterBalances: beforeBalances,

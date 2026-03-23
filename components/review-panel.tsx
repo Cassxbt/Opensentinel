@@ -7,6 +7,7 @@ export function ReviewPanel({
   policyResult,
   counterparty,
   pending,
+  executing,
   onExecute,
   executionMode,
   wallet,
@@ -15,6 +16,7 @@ export function ReviewPanel({
   policyResult: PolicyEvaluation;
   counterparty: CounterpartyResolution | null;
   pending?: boolean;
+  executing?: boolean;
   onExecute: () => void;
   executionMode?: "live" | "simulated";
   wallet: WalletRuntime | null;
@@ -22,11 +24,13 @@ export function ReviewPanel({
   const isReadOnlyReply = plan.steps.length === 0;
   const readiness = wallet?.readiness ?? "simulated";
   const canAttemptLiveExecution =
-    executionMode === "live" && readiness === "ready" && policyResult.allowed;
+    executionMode === "live" && readiness === "ready" && policyResult.allowed && !executing;
   const canPrepareDryRun = executionMode !== "live" && policyResult.allowed;
   const actionEnabled = canAttemptLiveExecution || canPrepareDryRun;
   const actionLabel =
-    executionMode === "live" && readiness === "ready"
+    executing
+      ? "executing via MoonPay…"
+      : executionMode === "live" && readiness === "ready"
       ? "execute live via MoonPay"
       : executionMode === "live"
         ? "live execution unavailable"
@@ -175,6 +179,12 @@ export function ReviewPanel({
                 <>
                   <span className="log-dim">·</span>
                   <span className="log-amber">{blockReason}</span>
+                </>
+              )}
+              {executing && (
+                <>
+                  <span className="log-dim">·</span>
+                  <span className="log-amber">sending command to MoonPay and waiting for execution output</span>
                 </>
               )}
               {executionMode !== "live" && (

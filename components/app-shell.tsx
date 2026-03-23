@@ -34,6 +34,7 @@ export function AppShell() {
   const [turns, setTurns] = useState<TerminalTurn[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [wallet, setWallet] = useState<WalletRuntime | null>(null);
+  const [executingTurnId, setExecutingTurnId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -141,21 +142,26 @@ export function AppShell() {
   }
 
   async function handleExecute(turn: TerminalTurn) {
-    if (!turn.plan.steps.length || !turn.policyResult.allowed || isPending) return;
+    if (!turn.plan.steps.length || !turn.policyResult.allowed || isPending || executingTurnId) return;
 
-    const execRes = await fetch("/api/execute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        plan: turn.plan,
-        policyResult: turn.policyResult,
-        counterparty: turn.counterparty,
-        policy,
-      }),
-    });
-    const execData = (await execRes.json()) as { receipt: Receipt };
-    setReceipts((current) => [execData.receipt, ...current]);
-    setPrompt("");
+    setExecutingTurnId(turn.id);
+    try {
+      const execRes = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: turn.plan,
+          policyResult: turn.policyResult,
+          counterparty: turn.counterparty,
+          policy,
+        }),
+      });
+      const execData = (await execRes.json()) as { receipt: Receipt };
+      setReceipts((current) => [execData.receipt, ...current]);
+      setPrompt("");
+    } finally {
+      setExecutingTurnId(null);
+    }
   }
 
   const mode = wallet?.executionMode ?? "simulated";
@@ -194,6 +200,7 @@ export function AppShell() {
                   policyResult={turn.policyResult}
                   counterparty={turn.counterparty}
                   pending={turn.pending}
+                  executing={executingTurnId === turn.id}
                   onExecute={() => void handleExecute(turn)}
                   executionMode={mode}
                   wallet={wallet}
@@ -206,6 +213,7 @@ export function AppShell() {
                 policyResult={placeholderPolicy}
                 counterparty={null}
                 pending={false}
+                executing={false}
                 onExecute={() => undefined}
                 executionMode={mode}
                 wallet={wallet}
