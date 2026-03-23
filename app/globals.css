@@ -33,7 +33,8 @@ body {
 /* ── Terminal root layout ── */
 
 .term-root {
-  height: 100vh;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -186,6 +187,16 @@ body {
 .log-check-fail { color: var(--red); }
 .log-check-rule { color: var(--text); font-size: 0.69rem; }
 .log-check-detail { color: var(--dim); font-size: 0.66rem; }
+
+.log-user-msg {
+  margin-top: 0.55rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid var(--border);
+}
+
+.log-user-msg .log-prompt { color: var(--accent); }
+.log-user-msg .log-text   { color: var(--text); font-size: 0.77rem; }
+.log-msg-ts { margin-left: auto; font-size: 0.62rem; flex-shrink: 0; }
 
 .log-thinking {
   font-size: 0.67rem;

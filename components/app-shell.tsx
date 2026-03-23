@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { CommandConsole } from "@/components/command-console";
 import { PolicyForm } from "@/components/policy-form";
 import { ReceiptTimeline } from "@/components/receipt-timeline";
@@ -18,9 +18,12 @@ import type {
   WalletRuntime,
 } from "@/lib/types";
 
+type ChatMessage = { id: string; text: string; ts: string };
+
 export function AppShell() {
   const [policy, setPolicy] = useState<Policy>(defaultPolicy);
   const [prompt, setPrompt] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [plan, setPlan] = useState<CommandPlan>(() => createCommandPlan(""));
   const [policyResult, setPolicyResult] = useState<PolicyEvaluation>(() =>
     evaluateCommandPlan(createCommandPlan(""), defaultPolicy),
@@ -29,6 +32,7 @@ export function AppShell() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [wallet, setWallet] = useState<WalletRuntime | null>(null);
   const [isPending, startTransition] = useTransition();
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -45,10 +49,19 @@ export function AppShell() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isPending, receipts]);
+
   async function handleRun() {
     if (!prompt.trim() || isPending) return;
 
     const currentPrompt = prompt;
+    setPrompt("");
+    setMessages((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), text: currentPrompt, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
+    ]);
 
     startTransition(async () => {
       try {
@@ -127,15 +140,37 @@ export function AppShell() {
       <div className="term-body">
         <div className="term-main">
           <div className="term-log">
-            <ReviewPanel
-              plan={plan}
-              policyResult={policyResult}
-              counterparty={counterparty}
-              pending={isPending}
-              onExecute={handleExecute}
-              executionMode={mode}
-            />
+            {messages.map((msg, i) => (
+              <div key={msg.id}>
+                <div className="log-line log-user-msg">
+                  <span className="log-prompt">&gt;</span>
+                  <span className="log-text">{msg.text}</span>
+                  <span className="log-dim log-msg-ts">{msg.ts}</span>
+                </div>
+                {i === messages.length - 1 && (
+                  <ReviewPanel
+                    plan={plan}
+                    policyResult={policyResult}
+                    counterparty={counterparty}
+                    pending={isPending}
+                    onExecute={handleExecute}
+                    executionMode={mode}
+                  />
+                )}
+              </div>
+            ))}
+            {messages.length === 0 && (
+              <ReviewPanel
+                plan={plan}
+                policyResult={policyResult}
+                counterparty={counterparty}
+                pending={isPending}
+                onExecute={handleExecute}
+                executionMode={mode}
+              />
+            )}
             <ReceiptTimeline receipts={receipts} />
+            <div ref={logEndRef} />
           </div>
           <div className="term-input-zone">
             <CommandConsole
