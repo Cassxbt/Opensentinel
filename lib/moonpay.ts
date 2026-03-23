@@ -96,6 +96,21 @@ function formatCommand(args: string[]) {
   return `mp ${args.map((value) => (/\s/.test(value) ? `"${value}"` : value)).join(" ")}`;
 }
 
+function normalizeNumericString(value: unknown) {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
+}
+
+function normalizeNumericValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function extractTxHashes(payload: unknown, sink: Set<string>) {
   if (!payload) return;
 
@@ -190,18 +205,19 @@ async function getBalancesForChain(wallet: WalletRuntime, chain: SupportedChain)
     const token = typeof entry.symbol === "string" ? entry.symbol : "UNKNOWN";
     const tokenAddress =
       typeof entry.address === "string" ? entry.address : "unknown";
+    const balanceObject =
+      typeof entry.balance === "object" && entry.balance
+        ? (entry.balance as Record<string, unknown>)
+        : null;
     const amount =
-      typeof entry.balance === "object" &&
-      entry.balance &&
-      typeof (entry.balance as { amount?: unknown }).amount === "string"
-        ? (entry.balance as { amount: string }).amount
-        : "0";
+      normalizeNumericString(balanceObject?.amount) ??
+      normalizeNumericString(entry.amount) ??
+      "0";
     const amountUsd =
-      typeof entry.valueUsd === "number"
-        ? entry.valueUsd
-        : typeof entry.usdValue === "number"
-          ? entry.usdValue
-          : null;
+      normalizeNumericValue(entry.valueUsd) ??
+      normalizeNumericValue(entry.usdValue) ??
+      normalizeNumericValue(balanceObject?.value) ??
+      null;
 
     return [
       {
