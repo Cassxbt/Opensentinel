@@ -249,6 +249,22 @@ function getTokenAddress(chain: SupportedChain, token: SupportedToken) {
   return tokenAddresses[chain][token];
 }
 
+function getBalancesSnapshot(wallet: WalletRuntime, chain: SupportedChain) {
+  return (wallet.balances ?? []).filter((entry) => entry.chain === chain);
+}
+
+function getLiveBlockDetail(wallet: WalletRuntime) {
+  if (wallet.readiness === "auth-required") {
+    return "Live execution is blocked until MoonPay authentication is restored.";
+  }
+
+  if (wallet.readiness === "needs-funding") {
+    return "Live execution is blocked until the wallet is funded on the required chain.";
+  }
+
+  return "Live execution is not ready yet.";
+}
+
 function getRecipient({
   step,
   counterparty,
@@ -345,11 +361,36 @@ export async function executePlanWithMoonPay({
   const executionSteps: ExecutionStepResult[] = [];
   const receiptHashes = new Set<string>();
 
-  for (const step of plan.steps) {
-    const beforeBalances = await getBalancesForChain(
+  if (wallet.executionMode === "live" && wallet.readiness !== "ready") {
+    for (const step of plan.steps) {
+      const chain = step.type === "bridge" ? step.sourceChain : step.destinationChain;
+      const balances = getBalancesSnapshot(wallet, chain);
+
+      executionSteps.push({
+        stepId: step.id,
+        type: step.type,
+        status: "blocked",
+        detail: getLiveBlockDetail(wallet),
+        command: "live execution unavailable",
+        txHashes: [],
+        beforeBalances: balances,
+        afterBalances: balances,
+      });
+    }
+
+    return {
       wallet,
-      step.type === "bridge" ? step.sourceChain : step.destinationChain,
-    );
+      executionSteps,
+      txHashes: [],
+    };
+  }
+
+  for (const step of plan.steps) {
+    const activeChain = step.type === "bridge" ? step.sourceChain : step.destinationChain;
+    const beforeBalances =
+      wallet.executionMode === "live"
+        ? await getBalancesForChain(wallet, activeChain)
+        : getBalancesSnapshot(wallet, activeChain);
 
     if (step.type === "dca") {
       executionSteps.push({
@@ -400,7 +441,7 @@ export async function executePlanWithMoonPay({
     const result = await runMoonPay(args);
     const afterBalances = await getBalancesForChain(
       wallet,
-      step.type === "bridge" ? step.destinationChain : step.destinationChain,
+      step.type === "bridge" ? step.destinationChain : activeChain,
     );
     const stepHashes = new Set<string>();
     extractTxHashes(result.parsed ?? result.stdout ?? result.stderr, stepHashes);

@@ -9,6 +9,15 @@ export function WalletStatus({
 }) {
   const activeHoldings = wallet?.balances?.filter((e) => Number(e.amount) > 0) ?? [];
   const mode = wallet?.executionMode ?? "simulated";
+  const readiness = wallet?.readiness ?? "simulated";
+  const readinessCopy =
+    readiness === "ready"
+      ? "live execution armed"
+      : readiness === "needs-funding"
+        ? "authenticated · awaiting funds"
+        : readiness === "auth-required"
+          ? "live mode blocked by auth"
+          : "dry-run only";
 
   return (
     <>
@@ -25,6 +34,9 @@ export function WalletStatus({
               synced {new Date(wallet.lastCheckedAt).toLocaleTimeString()}
             </span>
           )}
+        </div>
+        <div className="sidebar-dim" style={{ marginTop: "0.3rem" }}>
+          {readinessCopy}
         </div>
       </div>
 

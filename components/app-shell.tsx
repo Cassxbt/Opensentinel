@@ -18,17 +18,20 @@ import type {
   WalletRuntime,
 } from "@/lib/types";
 
-type ChatMessage = { id: string; text: string; ts: string };
+type TerminalTurn = {
+  id: string;
+  prompt: string;
+  ts: string;
+  plan: CommandPlan;
+  policyResult: PolicyEvaluation;
+  counterparty: CounterpartyResolution | null;
+  pending: boolean;
+};
 
 export function AppShell() {
   const [policy, setPolicy] = useState<Policy>(defaultPolicy);
   const [prompt, setPrompt] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [plan, setPlan] = useState<CommandPlan>(() => createCommandPlan(""));
-  const [policyResult, setPolicyResult] = useState<PolicyEvaluation>(() =>
-    evaluateCommandPlan(createCommandPlan(""), defaultPolicy),
-  );
-  const [counterparty, setCounterparty] = useState<CounterpartyResolution | null>(null);
+  const [turns, setTurns] = useState<TerminalTurn[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
   const [wallet, setWallet] = useState<WalletRuntime | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -51,16 +54,29 @@ export function AppShell() {
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isPending, receipts]);
+  }, [turns, isPending, receipts]);
 
   async function handleRun() {
     if (!prompt.trim() || isPending) return;
 
     const currentPrompt = prompt;
+    const currentTs = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const turnId = crypto.randomUUID();
+    const initialPlan = createCommandPlan(currentPrompt);
+    const initialPolicy = evaluateCommandPlan(initialPlan, policy);
+
     setPrompt("");
-    setMessages((prev) => [
+    setTurns((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), text: currentPrompt, ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) },
+      {
+        id: turnId,
+        prompt: currentPrompt,
+        ts: currentTs,
+        plan: initialPlan,
+        policyResult: initialPolicy,
+        counterparty: null,
+        pending: true,
+      },
     ]);
 
     startTransition(async () => {
@@ -75,43 +91,65 @@ export function AppShell() {
           counterparty: CounterpartyResolution | null;
         };
 
-        setPlan(planData.plan);
-        setCounterparty(planData.counterparty);
+        const nextPolicyResult =
+          planData.plan.steps.length > 0
+            ? (
+                (await (
+                  await fetch("/api/dry-run", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      plan: planData.plan,
+                      policy,
+                      counterparty: planData.counterparty,
+                    }),
+                  })
+                ).json()) as { result: PolicyEvaluation }
+              ).result
+            : evaluateCommandPlan(planData.plan, policy);
 
-        if (planData.plan.steps.length > 0) {
-          const dryRunRes = await fetch("/api/dry-run", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              plan: planData.plan,
-              policy,
-              counterparty: planData.counterparty,
-            }),
-          });
-          const dryRunData = (await dryRunRes.json()) as { result: PolicyEvaluation };
-          setPolicyResult(dryRunData.result);
-        } else {
-          setPolicyResult(evaluateCommandPlan(planData.plan, policy));
-        }
+        setTurns((current) =>
+          current.map((turn) =>
+            turn.id === turnId
+              ? {
+                  ...turn,
+                  plan: planData.plan,
+                  counterparty: planData.counterparty,
+                  policyResult: nextPolicyResult,
+                  pending: false,
+                }
+              : turn,
+          ),
+        );
       } catch {
         const fallbackPlan = createCommandPlan(currentPrompt);
-        setPlan(fallbackPlan);
-        setCounterparty(null);
-        setPolicyResult(evaluateCommandPlan(fallbackPlan, policy));
+        setTurns((current) =>
+          current.map((turn) =>
+            turn.id === turnId
+              ? {
+                  ...turn,
+                  plan: fallbackPlan,
+                  counterparty: null,
+                  policyResult: evaluateCommandPlan(fallbackPlan, policy),
+                  pending: false,
+                }
+              : turn,
+          ),
+        );
       }
     });
   }
 
-  async function handleExecute() {
-    if (!plan.steps.length || !policyResult.allowed || isPending) return;
+  async function handleExecute(turn: TerminalTurn) {
+    if (!turn.plan.steps.length || !turn.policyResult.allowed || isPending) return;
 
     const execRes = await fetch("/api/execute", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        plan,
-        policyResult,
-        counterparty,
+        plan: turn.plan,
+        policyResult: turn.policyResult,
+        counterparty: turn.counterparty,
         policy,
       }),
     });
@@ -124,6 +162,10 @@ export function AppShell() {
   const walletShort = wallet?.walletAddress
     ? `${wallet.walletAddress.slice(0, 8)}…${wallet.walletAddress.slice(-4)}`
     : "resolving";
+
+  const placeholderPlan = createCommandPlan("");
+  const placeholderPolicy = evaluateCommandPlan(placeholderPlan, policy);
+  const latestTurn = turns.at(-1) ?? null;
 
   return (
     <div className="term-root">
@@ -140,33 +182,33 @@ export function AppShell() {
       <div className="term-body">
         <div className="term-main">
           <div className="term-log">
-            {messages.map((msg, i) => (
-              <div key={msg.id}>
+            {turns.map((turn) => (
+              <div key={turn.id}>
                 <div className="log-line log-user-msg">
                   <span className="log-prompt">&gt;</span>
-                  <span className="log-text">{msg.text}</span>
-                  <span className="log-dim log-msg-ts">{msg.ts}</span>
+                  <span className="log-text">{turn.prompt}</span>
+                  <span className="log-dim log-msg-ts">{turn.ts}</span>
                 </div>
-                {i === messages.length - 1 && (
-                  <ReviewPanel
-                    plan={plan}
-                    policyResult={policyResult}
-                    counterparty={counterparty}
-                    pending={isPending}
-                    onExecute={handleExecute}
-                    executionMode={mode}
-                  />
-                )}
+                <ReviewPanel
+                  plan={turn.plan}
+                  policyResult={turn.policyResult}
+                  counterparty={turn.counterparty}
+                  pending={turn.pending}
+                  onExecute={() => void handleExecute(turn)}
+                  executionMode={mode}
+                  wallet={wallet}
+                />
               </div>
             ))}
-            {messages.length === 0 && (
+            {!latestTurn && (
               <ReviewPanel
-                plan={plan}
-                policyResult={policyResult}
-                counterparty={counterparty}
-                pending={isPending}
-                onExecute={handleExecute}
+                plan={placeholderPlan}
+                policyResult={placeholderPolicy}
+                counterparty={null}
+                pending={false}
+                onExecute={() => undefined}
                 executionMode={mode}
+                wallet={wallet}
               />
             )}
             <ReceiptTimeline receipts={receipts} />
@@ -193,8 +235,8 @@ export function AppShell() {
         <span className="term-statusbar-sep">│</span>
         <span>{walletShort}</span>
         <span className="term-statusbar-sep">│</span>
-        <span style={{ color: policyResult.allowed ? "var(--green)" : "var(--red)" }}>
-          {policyResult.allowed ? "policy clear" : "policy block"}
+        <span style={{ color: latestTurn?.policyResult.allowed ?? true ? "var(--green)" : "var(--red)" }}>
+          {latestTurn?.policyResult.allowed ?? true ? "policy clear" : "policy block"}
         </span>
         <span className="term-statusbar-sep">│</span>
         <span>{isPending ? "running…" : "ready"}</span>

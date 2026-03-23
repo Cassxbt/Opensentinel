@@ -3,10 +3,11 @@ import {
   buildExecutionNarrative,
   executePlanWithMoonPay,
   getMoonPayEnvironment,
+  inspectWalletRuntime,
 } from "@/lib/moonpay";
 import { buildOpenWalletArtifact } from "@/lib/openwallet";
 import { createReceipt } from "@/lib/receipts";
-import type { CounterpartyResolution, Policy } from "@/lib/types";
+import type { CounterpartyResolution, Policy, PolicyEvaluation } from "@/lib/types";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as {
@@ -16,9 +17,13 @@ export async function POST(request: Request) {
     policy?: Policy;
   };
   const typedPlan = body.plan as Parameters<typeof buildExecutionNarrative>[0]["plan"] | undefined;
-  const fallbackWallet = getMoonPayEnvironment();
+  const typedPolicyResult = body.policyResult as PolicyEvaluation | undefined;
+  const fallbackWallet =
+    getMoonPayEnvironment().executionMode === "live"
+      ? await inspectWalletRuntime()
+      : getMoonPayEnvironment();
   const walletExecution =
-    typedPlan
+    typedPlan && typedPolicyResult?.allowed
       ? await executePlanWithMoonPay({
           plan: typedPlan,
           counterparty: body.counterparty ?? null,
@@ -47,7 +52,7 @@ export async function POST(request: Request) {
 
   const receipt = createReceipt({
     plan: body.plan,
-    policyResult: body.policyResult,
+    policyResult: typedPolicyResult,
     policy: body.policy,
     mode: walletExecution.wallet.executionMode,
     wallet: walletExecution.wallet,

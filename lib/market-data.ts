@@ -5,15 +5,15 @@ type ResearchToken = {
   coingeckoId: string;
   symbol: string;
   name: string;
+  binanceSymbol?: string;
+  coinbaseProduct?: string;
 };
 
-type CoinGeckoPricePayload = Record<
-  string,
-  {
-    usd?: number;
-    usd_24h_change?: number;
-  }
->;
+type CoinGeckoPricePayload = Record<string, { usd?: number; usd_24h_change?: number }>;
+type MarketQuote = {
+  usd: number;
+  change24h?: number;
+};
 
 const supportedResearchTokens: ResearchToken[] = [
   {
@@ -21,36 +21,54 @@ const supportedResearchTokens: ResearchToken[] = [
     coingeckoId: "ethereum",
     symbol: "ETH",
     name: "Ethereum",
+    binanceSymbol: "ETHUSDT",
+    coinbaseProduct: "ETH-USD",
   },
   {
     aliases: ["weth", "wrapped eth", "wrapped ethereum"],
     coingeckoId: "weth",
     symbol: "WETH",
     name: "Wrapped Ether",
+    binanceSymbol: "ETHUSDT",
+    coinbaseProduct: "ETH-USD",
   },
   {
     aliases: ["usdc", "usd coin"],
     coingeckoId: "usd-coin",
     symbol: "USDC",
     name: "USD Coin",
+    binanceSymbol: "USDCUSDT",
+    coinbaseProduct: "USDC-USD",
   },
   {
     aliases: ["sol", "solana"],
     coingeckoId: "solana",
     symbol: "SOL",
     name: "Solana",
+    binanceSymbol: "SOLUSDT",
+    coinbaseProduct: "SOL-USD",
   },
   {
     aliases: ["btc", "bitcoin"],
     coingeckoId: "bitcoin",
     symbol: "BTC",
     name: "Bitcoin",
+    binanceSymbol: "BTCUSDT",
+    coinbaseProduct: "BTC-USD",
+  },
+  {
+    aliases: ["bnb", "binance coin", "binance"],
+    coingeckoId: "binancecoin",
+    symbol: "BNB",
+    name: "BNB",
+    binanceSymbol: "BNBUSDT",
   },
   {
     aliases: ["bonk"],
     coingeckoId: "bonk",
     symbol: "BONK",
     name: "BONK",
+    binanceSymbol: "BONKUSDT",
   },
 ];
 
@@ -62,6 +80,19 @@ const priceKeywords = [
   "trending",
   "safe",
   "risk",
+];
+
+const actionKeywords = [
+  "send",
+  "pay",
+  "transfer",
+  "bridge",
+  "swap",
+  "buy",
+  "sell",
+  "dca",
+  "deposit",
+  "withdraw",
 ];
 
 const capabilityKeywords = [
@@ -104,10 +135,11 @@ function createStaticResearchPlan(rawPrompt: string, agentResponse: string): Com
 }
 
 function extractTokens(prompt: string) {
+  const normalizedPrompt = prompt.replaceAll("botcoin", "bitcoin");
   const matches: ResearchToken[] = [];
 
   for (const token of supportedResearchTokens) {
-    if (token.aliases.some((alias) => prompt.includes(alias))) {
+    if (token.aliases.some((alias) => normalizedPrompt.includes(alias))) {
       matches.push(token);
     }
   }
@@ -137,25 +169,126 @@ async function fetchCoinGeckoPrices(tokens: ResearchToken[]) {
   return (await response.json()) as CoinGeckoPricePayload;
 }
 
+async function fetchBinanceQuote(token: ResearchToken) {
+  if (!token.binanceSymbol) return null;
+
+  const response = await fetch(
+    `https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(token.binanceSymbol)}`,
+    {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 30 },
+    },
+  );
+
+  if (!response.ok) return null;
+
+  const payload = (await response.json()) as {
+    lastPrice?: string;
+    priceChangePercent?: string;
+  };
+  const usd = Number(payload.lastPrice);
+  const change24h = Number(payload.priceChangePercent);
+
+  if (Number.isNaN(usd)) return null;
+
+  return {
+    usd,
+    change24h: Number.isNaN(change24h) ? undefined : change24h,
+  } satisfies MarketQuote;
+}
+
+async function fetchCoinbaseQuote(token: ResearchToken) {
+  if (!token.coinbaseProduct) return null;
+
+  const response = await fetch(
+    `https://api.coinbase.com/v2/prices/${encodeURIComponent(token.coinbaseProduct)}/spot`,
+    {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 30 },
+    },
+  );
+
+  if (!response.ok) return null;
+
+  const payload = (await response.json()) as {
+    data?: { amount?: string };
+  };
+  const usd = Number(payload.data?.amount);
+
+  if (Number.isNaN(usd)) return null;
+
+  return {
+    usd,
+  } satisfies MarketQuote;
+}
+
+async function fetchMarketQuotes(tokens: ResearchToken[]) {
+  const quotes = new Map<string, MarketQuote>();
+
+  try {
+    const market = await fetchCoinGeckoPrices(tokens);
+    for (const token of tokens) {
+      const entry = market[token.coingeckoId];
+      if (!entry || typeof entry.usd !== "number") continue;
+      quotes.set(token.coingeckoId, {
+        usd: entry.usd,
+        change24h:
+          typeof entry.usd_24h_change === "number" ? entry.usd_24h_change : undefined,
+      });
+    }
+  } catch {
+    // Fall through to public exchange endpoints.
+  }
+
+  for (const token of tokens) {
+    if (quotes.has(token.coingeckoId)) continue;
+
+    const binanceQuote = await fetchBinanceQuote(token);
+    if (binanceQuote) {
+      quotes.set(token.coingeckoId, binanceQuote);
+      continue;
+    }
+
+    const coinbaseQuote = await fetchCoinbaseQuote(token);
+    if (coinbaseQuote) {
+      quotes.set(token.coingeckoId, coinbaseQuote);
+    }
+  }
+
+  return quotes;
+}
+
 async function buildPriceResponse(tokens: ResearchToken[]) {
-  const market = await fetchCoinGeckoPrices(tokens);
+  const market = await fetchMarketQuotes(tokens);
   const lines = tokens.map((token) => {
-    const entry = market[token.coingeckoId];
-    if (!entry || typeof entry.usd !== "number") {
+    const entry = market.get(token.coingeckoId);
+    if (!entry) {
       return `${token.symbol} — live quote unavailable right now`;
     }
 
-    return `${token.symbol} (${token.name}) — ${formatUsd(entry.usd)} · ${formatChange(entry.usd_24h_change)}`;
+    return `${token.symbol} (${token.name}) — ${formatUsd(entry.usd)} · ${formatChange(entry.change24h)}`;
   });
 
-  return `${lines.join("\n")}\n\nLive market snapshot sourced from a public market data feed.`;
+  return lines.join("\n");
 }
 
 export function looksLikeResearchPrompt(rawPrompt: string) {
   const prompt = rawPrompt.trim().toLowerCase();
   if (!prompt) return false;
 
-  return hasKeyword(prompt, capabilityKeywords) || hasKeyword(prompt, priceKeywords);
+  if (hasKeyword(prompt, capabilityKeywords) || hasKeyword(prompt, priceKeywords)) {
+    return true;
+  }
+
+  if (hasKeyword(prompt, actionKeywords)) {
+    return false;
+  }
+
+  const normalized = prompt.replace(/[^\w\s]/g, " ");
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const tokens = extractTokens(prompt);
+
+  return tokens.length > 0 && words.length <= 4;
 }
 
 export async function resolveResearchPlan(rawPrompt: string) {
@@ -169,9 +302,10 @@ export async function resolveResearchPlan(rawPrompt: string) {
     return createStaticResearchPlan(
       rawPrompt,
       [
-        "I handle transfers, swaps, bridges, and DCA plan creation inside a policy-bound wallet.",
-        "I can also answer live token price questions before you decide whether to act.",
-        "For money-moving actions, I always route through planning, policy checks, and explicit execution review.",
+        "I can:",
+        "• send, swap, and bridge inside your wallet policy",
+        "• create DCA plans with review before execution",
+        "• answer live prices for ETH, SOL, BTC, BNB, USDC, WETH, and BONK",
       ].join("\n"),
     );
   }
@@ -180,7 +314,7 @@ export async function resolveResearchPlan(rawPrompt: string) {
   if (tokens.length === 0) {
     return createStaticResearchPlan(
       rawPrompt,
-      "I can answer live price questions for ETH, WETH, USDC, SOL, BTC, and BONK right now. Ask for the token directly, for example: 'what is ETH price and SOL price?'",
+      "I couldn't match that token to a live quote. Try ETH, SOL, BTC, BNB, USDC, WETH, or BONK.",
     );
   }
 

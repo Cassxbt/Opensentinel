@@ -1,6 +1,6 @@
 "use client";
 
-import type { CommandPlan, CounterpartyResolution, PolicyEvaluation } from "@/lib/types";
+import type { CommandPlan, CounterpartyResolution, PolicyEvaluation, WalletRuntime } from "@/lib/types";
 
 export function ReviewPanel({
   plan,
@@ -9,6 +9,7 @@ export function ReviewPanel({
   pending,
   onExecute,
   executionMode,
+  wallet,
 }: {
   plan: CommandPlan;
   policyResult: PolicyEvaluation;
@@ -16,7 +17,29 @@ export function ReviewPanel({
   pending?: boolean;
   onExecute: () => void;
   executionMode?: "live" | "simulated";
+  wallet: WalletRuntime | null;
 }) {
+  const isReadOnlyReply = plan.steps.length === 0;
+  const readiness = wallet?.readiness ?? "simulated";
+  const canAttemptLiveExecution =
+    executionMode === "live" && readiness === "ready" && policyResult.allowed;
+  const canPrepareDryRun = executionMode !== "live" && policyResult.allowed;
+  const actionEnabled = canAttemptLiveExecution || canPrepareDryRun;
+  const actionLabel =
+    executionMode === "live" && readiness === "ready"
+      ? "execute live via MoonPay"
+      : executionMode === "live"
+        ? "live execution unavailable"
+      : "prepare dry-run receipt";
+  const blockReason =
+    executionMode === "live" && readiness === "needs-funding"
+      ? "wallet authenticated but not funded yet"
+      : executionMode === "live" && readiness === "auth-required"
+        ? "live execution blocked until MoonPay auth is restored"
+        : executionMode === "live" && readiness !== "ready"
+          ? "live execution is not ready"
+          : null;
+
   if (pending) {
     return (
       <div className="log-line">
@@ -37,29 +60,31 @@ export function ReviewPanel({
 
   return (
     <div>
-      {plan.thinking && (
+      {plan.thinking && !isReadOnlyReply && (
         <div className="log-thinking">
           thinking: {plan.thinking}
         </div>
       )}
 
-      <div className="log-line">
-        <span className="log-prompt">planning</span>
-        <span className="log-cyan">{plan.intent}</span>
-        <span className="log-dim">·</span>
-        <span className="log-amber">{plan.confidence} confidence</span>
-        <span className="log-dim">·</span>
-        <span className="log-dim">{plan.steps.length} step(s)</span>
-      </div>
+      {!isReadOnlyReply && (
+        <div className="log-line">
+          <span className="log-prompt">planning</span>
+          <span className="log-cyan">{plan.intent}</span>
+          <span className="log-dim">·</span>
+          <span className="log-amber">{plan.confidence} confidence</span>
+          <span className="log-dim">·</span>
+          <span className="log-dim">{plan.steps.length} step(s)</span>
+        </div>
+      )}
 
-      {plan.steps.length === 0 && plan.agentResponse && (
+      {isReadOnlyReply && plan.agentResponse && (
         <div className="log-agent-response">{plan.agentResponse}</div>
       )}
 
-      {plan.steps.length === 0 && !plan.agentResponse && (
+      {isReadOnlyReply && !plan.agentResponse && (
         <div className="log-line" style={{ marginTop: "0.2rem" }}>
           <span className="log-prompt">sentinel</span>
-          <span className="log-dim">no executable wallet action found</span>
+          <span className="log-dim">no reply generated</span>
         </div>
       )}
 
@@ -141,10 +166,23 @@ export function ReviewPanel({
                 className="term-run-btn"
                 type="button"
                 onClick={onExecute}
+                disabled={!actionEnabled}
                 style={{ padding: "0.28rem 0.75rem", alignSelf: "auto" }}
               >
-                {executionMode === "live" ? "run moonpay route" : "prepare receipt"}
+                {actionLabel}
               </button>
+              {blockReason && (
+                <>
+                  <span className="log-dim">·</span>
+                  <span className="log-amber">{blockReason}</span>
+                </>
+              )}
+              {executionMode !== "live" && (
+                <>
+                  <span className="log-dim">·</span>
+                  <span className="log-dim">no funds will move in dry-run mode</span>
+                </>
+              )}
             </div>
           )}
 
